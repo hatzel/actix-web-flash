@@ -1,4 +1,4 @@
-use actix_web::{FromRequest, Error, HttpRequest, Responder, HttpResponse};
+use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
 use actix_web::dev::AsyncResult;
 use actix_web::error::ErrorBadRequest;
 use serde::Serialize;
@@ -13,10 +13,15 @@ const FLASH_COOKIE_NAME: &str = "_flash";
 struct Msg(String);
 
 #[derive(Debug)]
-pub struct FlashMessage<T>(T) where T: DeserializeOwned + Serialize;
+pub struct FlashMessage<T>(T)
+where
+    T: DeserializeOwned + Serialize;
 
 // TODO: consider removing Serialize contraint here
-impl<S, T> FromRequest<S> for FlashMessage<T> where T: DeserializeOwned + Serialize {
+impl<S, T> FromRequest<S> for FlashMessage<T>
+where
+    T: DeserializeOwned + Serialize,
+{
     type Config = ();
     type Result = Result<FlashMessage<T>, Error>;
 
@@ -31,24 +36,37 @@ impl<S, T> FromRequest<S> for FlashMessage<T> where T: DeserializeOwned + Serial
     }
 }
 
-
-struct FlashResponse<R, M> where R: Responder, M: Serialize + DeserializeOwned {
+struct FlashResponse<R, M>
+where
+    R: Responder,
+    M: Serialize + DeserializeOwned,
+{
     delegate_to: R,
-    message: FlashMessage<M>
+    message: FlashMessage<M>,
 }
 
-impl<R, M> Responder for FlashResponse<R, M> where R: Responder, M: Serialize + DeserializeOwned {
+impl<R, M> Responder for FlashResponse<R, M>
+where
+    R: Responder,
+    M: Serialize + DeserializeOwned,
+{
     type Item = AsyncResult<HttpResponse>;
     type Error = Error;
 
     fn respond_to<S: 'static>(self, req: &HttpRequest<S>) -> Result<Self::Item, Self::Error> {
-        self.delegate_to.respond_to(req).map(|v| v.into()).map_err(|v| v.into())
+        self.delegate_to
+            .respond_to(req)
+            .map(|v| v.into())
+            .map_err(|v| v.into())
     }
 }
 
-impl<R, M> FlashResponse<R, M> where R: Responder, M: Serialize + DeserializeOwned {
-    fn flash(response: R, message: FlashMessage<M>) {
-    }
+impl<R, M> FlashResponse<R, M>
+where
+    R: Responder,
+    M: Serialize + DeserializeOwned,
+{
+    fn flash(response: R, message: FlashMessage<M>) {}
 }
 
 #[cfg(test)]
