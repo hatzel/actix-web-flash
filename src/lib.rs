@@ -26,11 +26,11 @@ where
 
     fn from_request(req: &HttpRequest<S>, _cfg: &Self::Config) -> Self::Result {
         if let Some(cookie) = req.cookie(FLASH_COOKIE_NAME) {
-            // TODO: this ? might not work too well
-            let inner = serde_json::from_str(cookie.value())?;
+            let inner = serde_json::from_str(cookie.value())
+                .map_err(|_| ErrorBadRequest("Invalid flash cookie"))?;
             Ok(FlashMessage(inner))
         } else {
-            Err(ErrorBadRequest("No Flash Cookie."))
+            Err(ErrorBadRequest("No flash cookie"))
         }
     }
 }
@@ -79,7 +79,7 @@ where
                     .map(|_| req)
             })
         });
-        response_future.wait().into()
+        response_future.wait()
     }
 }
 
@@ -91,7 +91,7 @@ where
     pub fn flash(response: R, message: FlashMessage<M>) -> Self {
         Self {
             delegate_to: response,
-            message: message,
+            message,
         }
     }
 }

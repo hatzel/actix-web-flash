@@ -1,6 +1,6 @@
 use crate::{FlashMessage, FlashResponse, Responder};
 use actix_web::{FromRequest, HttpResponse};
-use actix_web::http::Cookie;
+use actix_web::http::{Cookie, StatusCode};
 use actix_web::test::TestRequest;
 
 #[test]
@@ -27,4 +27,15 @@ fn get_cookie() {
     let req = TestRequest::with_header("Cookie", "_flash=\"Test Message\"").finish();
     let msg = FlashMessage::<String>::from_request(&req, &()).unwrap();
     assert_eq!(msg.into_inner(), "Test Message");
+}
+
+#[test]
+/// Ensure improper cookie contents lead to an error.
+fn bad_request() {
+    let req = TestRequest::with_header("Cookie", "_flash=Missing quotes").finish();
+    let err = FlashMessage::<String>::from_request(&req, &()).unwrap_err();
+    // Don't return raw serialization errors
+    assert!(err.downcast_ref::<serde_json::error::Error>().is_none());
+    let resp = HttpResponse::from(err);
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST)
 }
