@@ -1,26 +1,22 @@
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
-use actix_web::dev::AsyncResult;
+use actix_web::http::Cookie;
 use actix_web::error::ErrorBadRequest;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_derive::Deserialize;
 use serde_derive;
 use serde_json;
+use futures::future::Future;
 
 const FLASH_COOKIE_NAME: &str = "_flash";
-
-#[derive(Deserialize)]
-struct Msg(String);
 
 #[derive(Debug)]
 pub struct FlashMessage<T>(T)
 where
-    T: DeserializeOwned + Serialize;
+    T: DeserializeOwned;
 
-// TODO: consider removing Serialize contraint here
 impl<S, T> FromRequest<S> for FlashMessage<T>
 where
-    T: DeserializeOwned + Serialize,
+    T: DeserializeOwned,
 {
     type Config = ();
     type Result = Result<FlashMessage<T>, Error>;
@@ -36,7 +32,20 @@ where
     }
 }
 
-struct FlashResponse<R, M>
+impl<M> FlashMessage<M>
+where
+    M: Serialize + DeserializeOwned,
+{
+    pub fn new(inner: M) -> Self {
+        FlashMessage(inner)
+    }
+
+    pub fn into_inner(self) -> M {
+        self.0
+    }
+}
+
+pub struct FlashResponse<R, M>
 where
     R: Responder,
     M: Serialize + DeserializeOwned,
@@ -50,14 +59,24 @@ where
     R: Responder,
     M: Serialize + DeserializeOwned,
 {
-    type Item = AsyncResult<HttpResponse>;
+    type Item = HttpResponse;
     type Error = Error;
 
     fn respond_to<S: 'static>(self, req: &HttpRequest<S>) -> Result<Self::Item, Self::Error> {
-        self.delegate_to
+        let data = serde_json::to_string(&self.message.into_inner())?;
+        let flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
+        let response = self.delegate_to
             .respond_to(req)
             .map(|v| v.into())
-            .map_err(|v| v.into())
+            .map_err(|v| v.into())?;
+        let response_future = response.then(|res| -> Result<_, Error> {
+            res.and_then(|mut req| {
+                req.add_cookie(&flash_cookie)
+                    .map_err(|e| e.into())
+                    .map(|_| req)
+            })
+        });
+        response_future.wait().into()
     }
 }
 
@@ -66,16 +85,10 @@ where
     R: Responder,
     M: Serialize + DeserializeOwned,
 {
-    fn flash(response: R, message: FlashMessage<M>) {}
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    pub fn flash(response: R, message: FlashMessage<M>) -> Self {
+        Self {
+            delegate_to: response,
+            message: message,
+        }
     }
 }
-
-// TODO: middelware for removing _flash cookie: Just always remove unless current request is
-// setting it
