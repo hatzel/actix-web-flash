@@ -7,7 +7,10 @@ use serde_derive;
 use serde_json;
 use futures::future::Future;
 
-const FLASH_COOKIE_NAME: &str = "_flash";
+#[cfg(test)]
+mod tests;
+
+pub(crate) const FLASH_COOKIE_NAME: &str = "_flash";
 
 #[derive(Debug)]
 pub struct FlashMessage<T>(T)
