@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["Hans Ole Hatzel <hhatzel@gmail.com>"]
 edition = "2018"
 license = "MIT/Apache-2.0"
+description = "Flash messages for actix-web"
+
+documentation = "https://docs.rs/actix-web-flash/0.1.0/actix-web-flash/"
+homepage = "https://github.com/hatzel/actix-web-flash"
+repository = "https://github.com/hatzel/actix-web-flash"
 
 [dependencies]
 actix-web = "0.7"

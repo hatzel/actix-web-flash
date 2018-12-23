@@ -10,6 +10,9 @@
 //! Currently `actix-web-flash` does not implement any cryptographic checks of the cookie's
 //! validity. Treat it as untrusted input!
 //!
+//! You can find example code below and in the
+//! [repository](https://github.com/hatzel/actix-web-flash/tree/master/examples).
+//!
 //! ## Trivial Example
 //! ```no_run
 //! use actix_web::{http, server, App, HttpRequest, HttpResponse, Responder};
