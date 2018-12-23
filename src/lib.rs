@@ -6,7 +6,7 @@
 //! The server notices the password is incorrect.
 //! It has to respond with an error. A common approach is to redirect the client to the same form.
 //!
-//! ```
+//! ```no_run
 //! use actix_web::{http, server, App, HttpRequest, HttpResponse, Responder};
 //! use actix_web_flash::{FlashMessage, FlashResponse};
 //!
@@ -163,7 +163,9 @@ where
 ///
 /// Without this middle ware any flash message is be passed into all handlers requesting it, until the cookie
 /// is overwritten by a new message.
-/// ```
+/// ```no_run
+/// # use actix_web_flash::{FlashMiddleware};
+/// # use actix_web::{App, server};
 /// server::new(|| {
 ///     App::new()
 ///         .middleware(FlashMiddleware::default())
