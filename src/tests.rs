@@ -7,8 +7,7 @@ use actix_web::test::TestRequest;
 /// Ensure the response properly sets the `_flash` cookie.
 fn sets_cookie() {
     let msg = "Test Message".to_owned();
-    let response =
-        FlashResponse::new(Some(msg.clone()), HttpResponse::Ok().finish());
+    let response = FlashResponse::new(Some(msg.clone()), HttpResponse::Ok().finish());
     let req = TestRequest::default()
         .execute(|req| response.respond_to(req))
         .unwrap();

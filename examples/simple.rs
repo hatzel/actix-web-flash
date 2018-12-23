@@ -1,5 +1,5 @@
 use actix_web::{http, server, App, HttpRequest, HttpResponse, Responder};
-use actix_web_flash::{FlashMessage, FlashResponse, FlashMiddleware};
+use actix_web_flash::{FlashMessage, FlashMiddleware, FlashResponse};
 
 fn show_flash(flash: FlashMessage<String>) -> impl Responder {
     flash.into_inner()

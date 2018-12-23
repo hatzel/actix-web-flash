@@ -1,14 +1,19 @@
 //! Actix web flash is an unofficial crate to provide flash messages in servers using Actix web.
 //!
-//! Flash messages are typically to display errors on in websites that are rendered server side.
+//! Flash messages are typically used to display errors on websites that are rendered server side.
 //!
-//! A user might post a login form with their user name and password.
-//! The server notices the password is incorrect.
+//! A user might post a login form with a password. The server notices the password is incorrect.
 //! It has to respond with an error. A common approach is to redirect the client to the same form.
+//! The error is displayed by being rendered into the html markup on the server side.
 //!
+//! The data is relayed to the next request via a cookie. This means its not suitable for large data!
+//! Currently `actix-web-flash` does not implement any cryptographic checks of the cookie's
+//! validity. Treat it as untrusted input!
+//!
+//! ## Trivial Example
 //! ```no_run
 //! use actix_web::{http, server, App, HttpRequest, HttpResponse, Responder};
-//! use actix_web_flash::{FlashMessage, FlashResponse};
+//! use actix_web_flash::{FlashMessage, FlashResponse, FlashMiddleware};
 //!
 //! fn show_flash(flash: FlashMessage<String>) -> impl Responder {
 //!     flash.into_inner()
@@ -26,6 +31,7 @@
 //! fn main() {
 //!     server::new(|| {
 //!         App::new()
+//!             .middleware(FlashMiddleware::default())
 //!             .route("/show_flash", http::Method::GET, show_flash)
 //!             .resource("/set_flash", |r| r.f(set_flash))
 //!     }).bind("127.0.0.1:8080")
@@ -33,10 +39,53 @@
 //!         .run();
 //! }
 //! ```
+//! The example above will redirect the user from `/set_flash` to `/show_flash` and pass along
+//! a string, rendering it right away.
 //!
-//! The data is relayed to the next request via a cookie. This means its not suitable for large data!
-//! Currently `actix-web-flash` does not implement any cryptographic checks of the cookie's
-//! validity. Treat it as untrusted input!
+//! ## Arbitrary Types
+//! Arbitrary types can be used as flash messages.
+//!
+//! ```
+//! use actix_web::Responder;
+//! use actix_web_flash::FlashMessage;
+//! use serde_derive::{Serialize, Deserialize};
+//!
+//! #[derive(Deserialize, Serialize, Debug)]
+//! struct MyData {
+//!     msg: String,
+//!     color: (u8, u8, u8),
+//! }
+//!
+//! fn show_flash(flash: FlashMessage<MyData>) -> impl Responder {
+//!     format!("Message {:?}", flash.into_inner())
+//! }
+//! ```
+//!
+//! ## Optional Messages
+//! It is possible to take an `Option<FlashMessage<T>>` thereby allowing for your route to also be
+//! called without a flash message having been returned in the previous request.
+//!
+//! ```
+//! use actix_web::Responder;
+//! use actix_web_flash::FlashMessage;
+//! use serde_derive::Deserialize;
+//!
+//!
+//! fn show_flash(flash: Option<FlashMessage<String>>) -> impl Responder {
+//!     match flash {
+//!         Some(msg) => format!("There was some error: {}", msg.into_inner()),
+//!         None => "All is good!".to_owned()
+//!     }
+//! }
+//! ```
+//!
+//! ## Limitations and Pitfalls
+//!
+//! Only a single message is supported. It can however be of any type (that implements `Deserialize`), meaning a `Vec<YourType>`
+//! is possible.
+//!
+//! The cookie will not be cleared unless the [middleware](actix_web_flash::FlashMiddleware) is registered.
+//! Meaning an error message will persist unless replaced with a newer one.
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
 use actix_web::http::Cookie;
 use actix_web::error::ErrorBadRequest;
@@ -53,6 +102,9 @@ mod tests;
 
 pub(crate) const FLASH_COOKIE_NAME: &str = "_flash";
 
+/// Represents a flash message and implements `actix::FromRequest`
+///
+/// It is used to retrieve the currently set flash message.
 #[derive(Debug)]
 pub struct FlashMessage<T>(T)
 where
@@ -89,6 +141,7 @@ where
     }
 }
 
+/// Actix response type that sets a flash message
 pub struct FlashResponse<R, M>
 where
     R: Responder,
@@ -159,10 +212,10 @@ where
 }
 
 #[derive(Debug, Default)]
-/// `FlashMiddleware` takes care of deleting the flash cookies after their use.
+/// Takes care of deleting the flash cookies after their use.
 ///
-/// Without this middle ware any flash message is be passed into all handlers requesting it, until the cookie
-/// is overwritten by a new message.
+/// Without this middle ware any flash message is be passed into all handlers requesting it, until
+/// the cookie is overwritten by a new message.
 /// ```no_run
 /// # use actix_web_flash::{FlashMiddleware};
 /// # use actix_web::{App, server};
@@ -176,9 +229,17 @@ where
 pub struct FlashMiddleware();
 
 impl<S> Middleware<S> for FlashMiddleware {
-    fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response, actix_web::Error> {
+    fn response(
+        &self,
+        req: &HttpRequest<S>,
+        mut resp: HttpResponse,
+    ) -> Result<Response, actix_web::Error> {
         let received_flash = req.cookie(FLASH_COOKIE_NAME);
-        if received_flash.is_some() && resp.cookies().find(|ref c| c.name() == FLASH_COOKIE_NAME).is_none() {
+        if received_flash.is_some()
+            && resp.cookies()
+                .find(|ref c| c.name() == FLASH_COOKIE_NAME)
+                .is_none()
+        {
             // Delete cookie by setting an expiry date in the past
             let mut expired = Cookie::new(FLASH_COOKIE_NAME, "");
             let time = time::strptime("1970-1-1", "%Y-%m-%d").unwrap();
