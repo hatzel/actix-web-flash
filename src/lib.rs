@@ -1,3 +1,42 @@
+//! Actix web flash is an unofficial crate to provide flash messages in servers using Actix web.
+//!
+//! Flash messages are typically to display errors on in websites that are rendered server side.
+//!
+//! A user might post a login form with their user name and password.
+//! The server notices the password is incorrect.
+//! It has to respond with an error. A common approach is to redirect the client to the same form.
+//!
+//! ```
+//! use actix_web::{http, server, App, HttpRequest, HttpResponse, Responder};
+//! use actix_web_flash::{FlashMessage, FlashResponse};
+//!
+//! fn show_flash(flash: FlashMessage<String>) -> impl Responder {
+//!     flash.into_inner()
+//! }
+//!
+//! fn set_flash(_req: &HttpRequest) -> FlashResponse<HttpResponse, String> {
+//!     FlashResponse::new(
+//!         Some("This is the message".to_owned()),
+//!         HttpResponse::SeeOther()
+//!             .header(http::header::LOCATION, "/show_flash")
+//!             .finish(),
+//!     )
+//! }
+//!
+//! fn main() {
+//!     server::new(|| {
+//!         App::new()
+//!             .route("/show_flash", http::Method::GET, show_flash)
+//!             .resource("/set_flash", |r| r.f(set_flash))
+//!     }).bind("127.0.0.1:8080")
+//!         .unwrap()
+//!         .run();
+//! }
+//! ```
+//!
+//! The data is relayed to the next request via a cookie. This means its not suitable for large data!
+//! Currently `actix-web-flash` does not implement any cryptographic checks of the cookie's
+//! validity. Treat it as untrusted input!
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
 use actix_web::http::Cookie;
 use actix_web::error::ErrorBadRequest;
@@ -54,7 +93,7 @@ where
     M: Serialize + DeserializeOwned,
 {
     delegate_to: R,
-    message: FlashMessage<M>,
+    message: Option<FlashMessage<M>>,
 }
 
 impl<R, M> Responder for FlashResponse<R, M>
@@ -66,20 +105,24 @@ where
     type Error = Error;
 
     fn respond_to<S: 'static>(self, req: &HttpRequest<S>) -> Result<Self::Item, Self::Error> {
-        let data = serde_json::to_string(&self.message.into_inner())?;
-        let flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
         let response = self.delegate_to
             .respond_to(req)
             .map(|v| v.into())
             .map_err(|v| v.into())?;
-        let response_future = response.then(|res| -> Result<_, Error> {
-            res.and_then(|mut req| {
-                req.add_cookie(&flash_cookie)
-                    .map_err(|e| e.into())
-                    .map(|_| req)
-            })
-        });
-        response_future.wait()
+        if let Some(msg) = self.message {
+            let data = serde_json::to_string(&msg.into_inner())?;
+            let flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
+            let response_future = response.then(|res| -> Result<_, Error> {
+                res.and_then(|mut req| {
+                    req.add_cookie(&flash_cookie)
+                        .map_err(|e| e.into())
+                        .map(|_| req)
+                })
+            });
+            response_future.wait()
+        } else {
+            response.wait()
+        }
     }
 }
 
@@ -88,10 +131,27 @@ where
     R: Responder,
     M: Serialize + DeserializeOwned,
 {
-    pub fn flash(response: R, message: FlashMessage<M>) -> Self {
+    ///
+    /// Constructs a new `FlashResponse` with a desired message and response.
+    ///
+    /// The message is saved in a cookie and can be extracted on the next request.
+    /// In a typical use-case for the response would be a redirect to a page that will display the
+    /// message.
+    ///
+    /// ```
+    /// # use actix_web_flash::{FlashMessage, FlashResponse};
+    /// #
+    /// FlashResponse::new(
+    ///     Some("Some error occurred".to_owned()),
+    ///     actix_web::HttpResponse::Ok()
+    ///         .header(actix_web::http::header::LOCATION, "/render_error")
+    ///         .finish(),
+    /// );
+    /// ```
+    pub fn new(message: Option<M>, response: R) -> Self {
         Self {
             delegate_to: response,
-            message,
+            message: message.map(|m| FlashMessage(m)),
         }
     }
 }
