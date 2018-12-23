@@ -3,6 +3,7 @@ name = "actix-web-flash"
 version = "0.1.0"
 authors = ["Hans Ole Hatzel <hhatzel@gmail.com>"]
 edition = "2018"
+license = "MIT/Apache-2.0"
 
 [dependencies]
 actix-web = "0.7"
