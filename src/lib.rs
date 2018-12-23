@@ -40,10 +40,12 @@
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
 use actix_web::http::Cookie;
 use actix_web::error::ErrorBadRequest;
+use actix_web::middleware::{Middleware, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_derive;
 use serde_json;
+use time;
 use futures::future::Future;
 
 #[cfg(test)]
@@ -153,5 +155,34 @@ where
             delegate_to: response,
             message: message.map(|m| FlashMessage(m)),
         }
+    }
+}
+
+#[derive(Debug, Default)]
+/// `FlashMiddleware` takes care of deleting the flash cookies after their use.
+///
+/// Without this middle ware any flash message is be passed into all handlers requesting it, until the cookie
+/// is overwritten by a new message.
+/// ```
+/// server::new(|| {
+///     App::new()
+///         .middleware(FlashMiddleware::default())
+/// }).bind("127.0.0.1:8080")
+///     .unwrap()
+///     .run();
+/// ```
+pub struct FlashMiddleware();
+
+impl<S> Middleware<S> for FlashMiddleware {
+    fn response(&self, req: &HttpRequest<S>, mut resp: HttpResponse) -> Result<Response, actix_web::Error> {
+        let received_flash = req.cookie(FLASH_COOKIE_NAME);
+        if received_flash.is_some() && resp.cookies().find(|ref c| c.name() == FLASH_COOKIE_NAME).is_none() {
+            // Delete cookie by setting an expiry date in the past
+            let mut expired = Cookie::new(FLASH_COOKIE_NAME, "");
+            let time = time::strptime("1970-1-1", "%Y-%m-%d").unwrap();
+            expired.set_expires(time);
+            resp.add_cookie(&expired)?;
+        }
+        Ok(Response::Done(resp))
     }
 }

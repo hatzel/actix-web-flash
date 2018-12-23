@@ -1,6 +1,5 @@
 use actix_web::{http, server, App, HttpResponse, Responder, Form};
-use actix_web::http::header::ContentType;
-use actix_web_flash::{FlashMessage, FlashResponse};
+use actix_web_flash::{FlashMessage, FlashResponse, FlashMiddleware};
 use serde_derive::Deserialize;
 
 #[derive(Deserialize)]
@@ -15,8 +14,8 @@ fn get_login(flash: Option<FlashMessage<String>>) -> impl Responder {
     // instead: https://www.arewewebyet.org/topics/templating/.
     let form = format!(r#"<html>
 <form class="" action="" method="post">
-    <p>{}</p>
     <input type="password" name="password" id="password" value="">
+    <p style="color:red;">{}</p>
     <input type="submit" value="Login" />
 </form>
 </html>
@@ -46,6 +45,7 @@ fn post_login(form: Form<Password>) -> impl Responder {
 fn main() {
     server::new(|| {
         App::new()
+            .middleware(FlashMiddleware::default())
             .route("/login", http::Method::GET, get_login)
             .route("/login", http::Method::POST, post_login)
     }).bind("127.0.0.1:8080")
