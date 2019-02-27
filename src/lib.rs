@@ -105,6 +105,21 @@ mod tests;
 
 pub(crate) const FLASH_COOKIE_NAME: &str = "_flash";
 
+// Content of `time::empty_tm`, copied here since `time::empty_tm` is not a const fn
+pub(crate) const EMPTY_TM: time::Tm = time::Tm {
+    tm_sec: 0,
+    tm_min: 0,
+    tm_hour: 0,
+    tm_mday: 0,
+    tm_mon: 0,
+    tm_year: 0,
+    tm_wday: 0,
+    tm_yday: 0,
+    tm_isdst: 0,
+    tm_utcoff: 0,
+    tm_nsec: 0,
+};
+
 /// Represents a flash message and implements `actix::FromRequest`
 ///
 /// It is used to retrieve the currently set flash message.
@@ -159,7 +174,7 @@ where
     R: Responder,
     M: Serialize + DeserializeOwned,
 {
-    type Item = HttpResponse;
+    type Item = actix_web::dev::AsyncResult<HttpResponse>;
     type Error = Error;
 
     fn respond_to<S: 'static>(self, req: &HttpRequest<S>) -> Result<Self::Item, Self::Error> {
@@ -167,19 +182,18 @@ where
             .respond_to(req)
             .map(|v| v.into())
             .map_err(|v| v.into())?;
+
         if let Some(msg) = self.message {
             let data = serde_json::to_string(&msg.into_inner())?;
             let flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
-            let response_future = response.then(|res| -> Result<_, Error> {
-                res.and_then(|mut req| {
-                    req.add_cookie(&flash_cookie)
-                        .map_err(|e| e.into())
-                        .map(|_| req)
-                })
+            let response_future = response.and_then(move |mut res| {
+                res.add_cookie(&flash_cookie)
+                    .map_err(|e| e.into())
+                    .map(|_| res)
             });
-            response_future.wait()
+            Ok(actix_web::dev::AsyncResult::future(Box::new(response_future)))
         } else {
-            response.wait()
+            Ok(response)
         }
     }
 }
@@ -214,6 +228,18 @@ where
     }
 }
 
+impl<M> FlashResponse<HttpResponse, M>
+where
+    M: Serialize + DeserializeOwned,
+{
+    pub fn with_redirect(message: M, location: &str) -> Self {
+        let response = actix_web::HttpResponse::SeeOther()
+            .header(actix_web::http::header::LOCATION, location)
+            .finish();
+        Self::new(Some(message), response)
+    }
+}
+
 #[derive(Debug, Default)]
 /// Takes care of deleting the flash cookies after their use.
 ///
@@ -245,8 +271,7 @@ impl<S> Middleware<S> for FlashMiddleware {
         {
             // Delete cookie by setting an expiry date in the past
             let mut expired = Cookie::new(FLASH_COOKIE_NAME, "");
-            let time = time::strptime("1970-1-1", "%Y-%m-%d").unwrap();
-            expired.set_expires(time);
+            expired.set_expires(EMPTY_TM);
             resp.add_cookie(&expired)?;
         }
         Ok(Response::Done(resp))
