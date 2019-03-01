@@ -174,7 +174,7 @@ where
     R: Responder,
     M: Serialize + DeserializeOwned,
 {
-    type Item = HttpResponse;
+    type Item = actix_web::dev::AsyncResult<HttpResponse>;
     type Error = Error;
 
     fn respond_to<S: 'static>(self, req: &HttpRequest<S>) -> Result<Self::Item, Self::Error> {
@@ -182,19 +182,18 @@ where
             .respond_to(req)
             .map(|v| v.into())
             .map_err(|v| v.into())?;
+
         if let Some(msg) = self.message {
             let data = serde_json::to_string(&msg.into_inner())?;
             let flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
-            let response_future = response.then(|res| -> Result<_, Error> {
-                res.and_then(|mut req| {
-                    req.add_cookie(&flash_cookie)
-                        .map_err(|e| e.into())
-                        .map(|_| req)
-                })
+            let response_future = response.and_then(move |mut res| {
+                res.add_cookie(&flash_cookie)
+                    .map_err(|e| e.into())
+                    .map(|_| res)
             });
-            response_future.wait()
+            Ok(actix_web::dev::AsyncResult::future(Box::new(response_future)))
         } else {
-            response.wait()
+            Ok(response)
         }
     }
 }
