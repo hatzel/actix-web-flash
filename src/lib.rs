@@ -105,6 +105,21 @@ mod tests;
 
 pub(crate) const FLASH_COOKIE_NAME: &str = "_flash";
 
+// Content of `time::empty_tm`, copied here since `time::empty_tm` is not a const fn
+pub(crate) const EMPTY_TM: time::Tm = time::Tm {
+    tm_sec: 0,
+    tm_min: 0,
+    tm_hour: 0,
+    tm_mday: 0,
+    tm_mon: 0,
+    tm_year: 0,
+    tm_wday: 0,
+    tm_yday: 0,
+    tm_isdst: 0,
+    tm_utcoff: 0,
+    tm_nsec: 0,
+};
+
 /// Represents a flash message and implements `actix::FromRequest`
 ///
 /// It is used to retrieve the currently set flash message.
@@ -245,8 +260,7 @@ impl<S> Middleware<S> for FlashMiddleware {
         {
             // Delete cookie by setting an expiry date in the past
             let mut expired = Cookie::new(FLASH_COOKIE_NAME, "");
-            let time = time::strptime("1970-1-1", "%Y-%m-%d").unwrap();
-            expired.set_expires(time);
+            expired.set_expires(EMPTY_TM);
             resp.add_cookie(&expired)?;
         }
         Ok(Response::Done(resp))
