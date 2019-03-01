@@ -1,4 +1,6 @@
 # Actix Web Flash
+[![Build Status](https://travis-ci.org/hatzel/actix-web-flash.svg?branch=master)](https://travis-ci.org/hatzel/actix-web-flash)
+
 Actix web flash is an unofficial crate to provide flash messages in servers using Actix web.
 
 Flash messages are typically used to display errors on websites that are rendered server side.
