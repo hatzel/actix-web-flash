@@ -228,6 +228,18 @@ where
     }
 }
 
+impl<M> FlashResponse<HttpResponse, M>
+where
+    M: Serialize + DeserializeOwned,
+{
+    pub fn with_redirect(message: M, location: &str) -> Self {
+        let response = actix_web::HttpResponse::SeeOther()
+            .header(actix_web::http::header::LOCATION, location)
+            .finish();
+        Self::new(Some(message), response)
+    }
+}
+
 #[derive(Debug, Default)]
 /// Takes care of deleting the flash cookies after their use.
 ///
