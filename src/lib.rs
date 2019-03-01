@@ -185,7 +185,10 @@ where
 
         if let Some(msg) = self.message {
             let data = serde_json::to_string(&msg.into_inner())?;
-            let flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
+            
+            let mut flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
+            flash_cookie.set_path("/");
+
             let response_future = response.and_then(move |mut res| {
                 res.add_cookie(&flash_cookie)
                     .map_err(|e| e.into())
@@ -272,6 +275,7 @@ impl<S> Middleware<S> for FlashMiddleware {
             // Delete cookie by setting an expiry date in the past
             let mut expired = Cookie::new(FLASH_COOKIE_NAME, "");
             expired.set_expires(EMPTY_TM);
+            expired.set_path("/");
             resp.add_cookie(&expired)?;
         }
         Ok(Response::Done(resp))
