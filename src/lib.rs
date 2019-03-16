@@ -90,7 +90,7 @@
 //! The cookie will not be cleared unless the [middleware](actix_web_flash::FlashMiddleware) is registered.
 //! Meaning an error message will persist unless replaced with a newer one.
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
-use cookie::{CookieJar, Cookie};
+use cookie::{Cookie, CookieJar};
 use actix_web::error::ErrorBadRequest;
 use actix_web::middleware::{Middleware, Response};
 use serde::Serialize;
@@ -168,7 +168,7 @@ where
 
         if let Some(msg) = self.message {
             let data = serde_json::to_string(&msg.into_inner())?;
-            
+
             let mut flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
             flash_cookie.set_path("/");
 
@@ -177,7 +177,9 @@ where
                     .map_err(|e| e.into())
                     .map(|_| res)
             });
-            Ok(actix_web::dev::AsyncResult::future(Box::new(response_future)))
+            Ok(actix_web::dev::AsyncResult::future(Box::new(
+                response_future,
+            )))
         } else {
             Ok(response)
         }
