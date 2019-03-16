@@ -95,9 +95,7 @@ use actix_web::error::ErrorBadRequest;
 use actix_web::middleware::{Middleware, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_derive;
 use serde_json;
-use time;
 use futures::future::Future;
 
 #[cfg(test)]
@@ -211,7 +209,7 @@ where
     pub fn new(message: Option<M>, response: R) -> Self {
         Self {
             delegate_to: response,
-            message: message.map(|m| FlashMessage(m)),
+            message: message.map(FlashMessage),
         }
     }
 }
