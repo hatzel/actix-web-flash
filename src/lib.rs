@@ -90,7 +90,7 @@
 //! The cookie will not be cleared unless the [middleware](actix_web_flash::FlashMiddleware) is registered.
 //! Meaning an error message will persist unless replaced with a newer one.
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
-use actix_web::http::Cookie;
+use cookie::{CookieJar, Cookie};
 use actix_web::error::ErrorBadRequest;
 use actix_web::middleware::{Middleware, Response};
 use serde::Serialize;
@@ -104,21 +104,6 @@ use futures::future::Future;
 mod tests;
 
 pub(crate) const FLASH_COOKIE_NAME: &str = "_flash";
-
-// Content of `time::empty_tm`, copied here since `time::empty_tm` is not a const fn
-pub(crate) const EMPTY_TM: time::Tm = time::Tm {
-    tm_sec: 0,
-    tm_min: 0,
-    tm_hour: 0,
-    tm_mday: 0,
-    tm_mon: 0,
-    tm_year: 0,
-    tm_wday: 0,
-    tm_yday: 0,
-    tm_isdst: 0,
-    tm_utcoff: 0,
-    tm_nsec: 0,
-};
 
 /// Represents a flash message and implements `actix::FromRequest`
 ///
@@ -266,17 +251,13 @@ impl<S> Middleware<S> for FlashMiddleware {
         req: &HttpRequest<S>,
         mut resp: HttpResponse,
     ) -> Result<Response, actix_web::Error> {
-        let received_flash = req.cookie(FLASH_COOKIE_NAME);
-        if received_flash.is_some()
-            && resp.cookies()
-                .find(|ref c| c.name() == FLASH_COOKIE_NAME)
-                .is_none()
-        {
-            // Delete cookie by setting an expiry date in the past
-            let mut expired = Cookie::new(FLASH_COOKIE_NAME, "");
-            expired.set_expires(EMPTY_TM);
-            expired.set_path("/");
-            resp.add_cookie(&expired)?;
+        let mut jar = CookieJar::new();
+        if let Some(cookie) = req.cookie(FLASH_COOKIE_NAME) {
+            jar.add_original(cookie);
+            jar.remove(Cookie::named(FLASH_COOKIE_NAME));
+        }
+        for cookie in jar.delta() {
+            resp.add_cookie(cookie)?;
         }
         Ok(Response::Done(resp))
     }
