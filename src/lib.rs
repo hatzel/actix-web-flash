@@ -4,7 +4,7 @@
 //!
 //! A user might post a login form with a password. The server notices the password is incorrect.
 //! It has to respond with an error. A common approach is to redirect the client to the same form.
-//! The error is displayed by being rendered into the html markup on the server side.
+//! The error is displayed by being rendered into the HTML markup on the server side.
 //!
 //! The data is relayed to the next request via a cookie. This means its not suitable for large data!
 //! Currently `actix-web-flash` does not implement any cryptographic checks of the cookie's
@@ -88,7 +88,8 @@
 //! is possible.
 //!
 //! The cookie will not be cleared unless the [middleware](actix_web_flash::FlashMiddleware) is registered.
-//! Meaning an error message will persist unless replaced with a newer one.
+//! Meaning an error message will, if no middleware is present, persist unless replaced by a newer one.
+#![deny(missing_docs)]
 use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
 use cookie::{Cookie, CookieJar};
 use actix_web::error::ErrorBadRequest;
@@ -105,7 +106,8 @@ pub(crate) const FLASH_COOKIE_NAME: &str = "_flash";
 
 /// Represents a flash message and implements `actix::FromRequest`
 ///
-/// It is used to retrieve the currently set flash message.
+/// It is used to retrieve the current flash message from a request and to set a new one in
+/// a response.
 #[derive(Debug)]
 pub struct FlashMessage<T>(T)
 where
@@ -133,10 +135,12 @@ impl<M> FlashMessage<M>
 where
     M: Serialize + DeserializeOwned,
 {
+    /// Create a new flash message with `inner` as the content.
     pub fn new(inner: M) -> Self {
         FlashMessage(inner)
     }
 
+    /// Retrieve the content of a flash message.
     pub fn into_inner(self) -> M {
         self.0
     }
@@ -220,6 +224,20 @@ impl<M> FlashResponse<HttpResponse, M>
 where
     M: Serialize + DeserializeOwned,
 {
+    /// Create a flash response that redirects to a given location.
+    /// The response code is `303 - See Other` meaning the client will perform a `GET` request on the
+    /// resource you are redirecting to.
+    ///
+    ///! ```
+    ///! # use actix_web_flash::{FlashResponse, FlashMessage};
+    ///! # use actix_web::Responder;
+    ///! #
+    ///! fn show_flash(flash: FlashMessage<String>) -> impl Responder {
+    ///!     FlashResponse::with_redirect("Your message".to_owned(), "/show_flash")
+    ///! }
+    ///
+    ///! ```
+    ///
     pub fn with_redirect(message: M, location: &str) -> Self {
         let response = actix_web::HttpResponse::SeeOther()
             .header(actix_web::http::header::LOCATION, location)
