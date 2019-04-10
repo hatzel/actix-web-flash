@@ -35,12 +35,7 @@ fn post_login(form: Form<Password>) -> impl Responder {
     if form.into_inner().password == "hunter2" {
         FlashResponse::new(None, "Correct Password!".into())
     } else {
-        FlashResponse::new(
-            Some("Incorrect Password".to_owned()),
-            HttpResponse::SeeOther()
-                .header(http::header::LOCATION, "/login")
-                .finish(),
-        )
+        FlashResponse::with_redirect("Incorrect Password".to_owned(), "login")
     }
 }
 
