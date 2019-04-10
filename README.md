@@ -1,5 +1,8 @@
 # Actix Web Flash
 [![Build Status](https://travis-ci.org/hatzel/actix-web-flash.svg?branch=master)](https://travis-ci.org/hatzel/actix-web-flash)
+[![Crates.io](https://img.shields.io/crates/v/actix-web-flash.svg)](https://crates.io/crates/actix-web-flash)
+[![dependency status](https://deps.rs/repo/github/hatzel/actix-web-flash/status.svg)](https://deps.rs/repo/github/hatzel/actix-web-flash)
+[![license](https://img.shields.io/crates/l/actix-web-flash.svg)](https://github.com/hatzel/actix-web-flash/blob/master/LICENSE-MIT)
 
 Actix web flash is an unofficial crate to provide flash messages in servers using Actix web.
 
