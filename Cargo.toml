@@ -11,7 +11,9 @@ homepage = "https://github.com/hatzel/actix-web-flash"
 repository = "https://github.com/hatzel/actix-web-flash"
 
 [dependencies]
-actix-web = "0.7"
+actix-web = "1.0.0-beta.3"
+actix-service = "0.4"
+actix-http = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"

@@ -90,14 +90,16 @@
 //! The cookie will not be cleared unless the [middleware](actix_web_flash::FlashMiddleware) is registered.
 //! Meaning an error message will, if no middleware is present, persist unless replaced by a newer one.
 #![deny(missing_docs)]
-use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder};
-use cookie::{Cookie, CookieJar};
+use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder, HttpMessage};
+use actix_service::{Service, Transform};
+use actix_web::dev::{ServiceRequest, ServiceResponse};
+use actix_web::cookie::{Cookie, CookieJar};
 use actix_web::error::ErrorBadRequest;
-use actix_web::middleware::{Middleware, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json;
-use futures::future::Future;
+use futures::future::{Future, IntoFuture, Either as EitherFuture, ok as fut_ok, FutureResult};
+use futures::Poll;
 
 #[cfg(test)]
 mod tests;
@@ -113,14 +115,15 @@ pub struct FlashMessage<T>(T)
 where
     T: DeserializeOwned;
 
-impl<S, T> FromRequest<S> for FlashMessage<T>
+impl<T> FromRequest for FlashMessage<T>
 where
     T: DeserializeOwned,
 {
     type Config = ();
-    type Result = Result<FlashMessage<T>, Error>;
+    type Future = Result<FlashMessage<T>, Self::Error>;
+    type Error = Error;
 
-    fn from_request(req: &HttpRequest<S>, _cfg: &Self::Config) -> Self::Result {
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
         if let Some(cookie) = req.cookie(FLASH_COOKIE_NAME) {
             let inner = serde_json::from_str(cookie.value())
                 .map_err(|_| ErrorBadRequest("Invalid flash cookie"))?;
@@ -158,35 +161,38 @@ where
 
 impl<R, M> Responder for FlashResponse<R, M>
 where
-    R: Responder,
-    M: Serialize + DeserializeOwned,
+    R: Responder + 'static,
+    R::Future: 'static,
+    M: Serialize + DeserializeOwned + 'static,
 {
-    type Item = actix_web::dev::AsyncResult<HttpResponse>;
-    type Error = Error;
+    type Error = actix_http::Error;
+    type Future = Box<Future<Item=HttpResponse, Error = Self::Error>>;
 
-    fn respond_to<S: 'static>(self, req: &HttpRequest<S>) -> Result<Self::Item, Self::Error> {
-        let response = self.delegate_to
+    fn respond_to(mut self, req: &HttpRequest) -> Self::Future {
+
+        let message = self.message.take();
+
+        let out = self.delegate_to
             .respond_to(req)
-            .map(|v| v.into())
-            .map_err(|v| v.into())?;
-
-        if let Some(msg) = self.message {
-            let data = serde_json::to_string(&msg.into_inner())?;
-
-            let mut flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
-            flash_cookie.set_path("/");
-
-            let response_future = response.and_then(move |mut res| {
-                res.add_cookie(&flash_cookie)
-                    .map_err(|e| e.into())
-                    .map(|_| res)
+            .into_future()
+            .map_err(|e| e.into())
+            .and_then(|mut response| {
+                if let Some(msg) = message {
+                    let data = serde_json::to_string(&msg.into_inner()).expect("Serialize cannot fail");
+                    let mut flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
+                    flash_cookie.set_path("/");
+                    let out = response.add_cookie(&flash_cookie)
+                        .into_future()
+                        .map_err(|e| e.into())
+                        .map(|_| response );
+                    EitherFuture::A(out)
+                } else {
+                    EitherFuture::B(futures::future::ok(response))
+                }
             });
-            Ok(actix_web::dev::AsyncResult::future(Box::new(
-                response_future,
-            )))
-        } else {
-            Ok(response)
-        }
+
+        Box::new(out)
+
     }
 }
 
@@ -261,22 +267,55 @@ where
 ///     .unwrap()
 ///     .run();
 /// ```
-pub struct FlashMiddleware();
+pub struct FlashMiddleware;
 
-impl<S> Middleware<S> for FlashMiddleware {
-    fn response(
-        &self,
-        req: &HttpRequest<S>,
-        mut resp: HttpResponse,
-    ) -> Result<Response, actix_web::Error> {
-        let mut jar = CookieJar::new();
-        if let Some(cookie) = req.cookie(FLASH_COOKIE_NAME) {
-            jar.add_original(cookie);
-            jar.remove(Cookie::named(FLASH_COOKIE_NAME));
-        }
-        for cookie in jar.delta() {
-            resp.add_cookie(cookie)?;
-        }
-        Ok(Response::Done(resp))
+impl<S, B> Transform<S> for FlashMiddleware
+where
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+{
+    type Request = ServiceRequest;
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type InitError = ();
+    type Transform = FlashMiddlewareServiceWrapper<S>;
+    type Future = FutureResult<Self::Transform, Self::InitError>;
+
+    fn new_transform(&self, service: S) -> Self::Future {
+        fut_ok(FlashMiddlewareServiceWrapper(service))
+    }
+}
+
+/// The actual Flash middleware
+pub struct FlashMiddlewareServiceWrapper<S>(S);
+
+impl<S, B> Service for FlashMiddlewareServiceWrapper<S>
+where
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
+    S::Future: 'static,
+{
+    type Request = ServiceRequest;
+    type Response = ServiceResponse<B>;
+    type Error = Error;
+    type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
+
+    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
+        self.0.poll_ready()
+    }
+
+    fn call(&mut self, req: ServiceRequest) -> Self::Future {
+
+        Box::new(self.0.call(req).map(move |mut res| {
+            let mut jar = CookieJar::new();
+            if let Some(cookie) = res.request().cookie(FLASH_COOKIE_NAME) {
+                jar.add_original(cookie);
+                jar.remove(Cookie::named(FLASH_COOKIE_NAME));
+            }
+            for cookie in jar.delta() {
+                let _ = res.response_mut().add_cookie(cookie);
+            }
+
+            res
+        }))
     }
 }
