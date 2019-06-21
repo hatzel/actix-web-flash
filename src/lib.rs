@@ -15,14 +15,14 @@
 //!
 //! ## Trivial Example
 //! ```no_run
-//! use actix_web::{http, server, App, HttpRequest, HttpResponse, Responder};
+//! use actix_web::{http, web, HttpServer, App, HttpRequest, HttpResponse, Responder};
 //! use actix_web_flash::{FlashMessage, FlashResponse, FlashMiddleware};
 //!
 //! fn show_flash(flash: FlashMessage<String>) -> impl Responder {
 //!     flash.into_inner()
 //! }
 //!
-//! fn set_flash(_req: &HttpRequest) -> FlashResponse<HttpResponse, String> {
+//! fn set_flash(_req: HttpRequest) -> FlashResponse<HttpResponse, String> {
 //!     FlashResponse::new(
 //!         Some("This is the message".to_owned()),
 //!         HttpResponse::SeeOther()
@@ -32,11 +32,11 @@
 //! }
 //!
 //! fn main() {
-//!     server::new(|| {
+//!     HttpServer::new(|| {
 //!         App::new()
-//!             .middleware(FlashMiddleware::default())
-//!             .route("/show_flash", http::Method::GET, show_flash)
-//!             .resource("/set_flash", |r| r.f(set_flash))
+//!             .wrap(FlashMiddleware::default())
+//!             .route("/show_flash", web::get().to(show_flash))
+//!             .route("/set_flash", web::get().to(set_flash))
 //!     }).bind("127.0.0.1:8080")
 //!         .unwrap()
 //!         .run();
@@ -90,16 +90,16 @@
 //! The cookie will not be cleared unless the [middleware](actix_web_flash::FlashMiddleware) is registered.
 //! Meaning an error message will, if no middleware is present, persist unless replaced by a newer one.
 #![deny(missing_docs)]
-use actix_web::{Error, FromRequest, HttpRequest, HttpResponse, Responder, HttpMessage};
 use actix_service::{Service, Transform};
-use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::cookie::{Cookie, CookieJar};
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::ErrorBadRequest;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use serde_json;
-use futures::future::{Future, IntoFuture, Either as EitherFuture, ok as fut_ok, FutureResult};
+use actix_web::{Error, FromRequest, HttpMessage, HttpRequest, HttpResponse, Responder};
+use futures::future::{ok as fut_ok, Either as EitherFuture, Future, FutureResult, IntoFuture};
 use futures::Poll;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use serde_json;
 
 #[cfg(test)]
 mod tests;
@@ -166,25 +166,27 @@ where
     M: Serialize + DeserializeOwned + 'static,
 {
     type Error = actix_http::Error;
-    type Future = Box<Future<Item=HttpResponse, Error = Self::Error>>;
+    type Future = Box<Future<Item = HttpResponse, Error = Self::Error>>;
 
     fn respond_to(mut self, req: &HttpRequest) -> Self::Future {
-
         let message = self.message.take();
 
-        let out = self.delegate_to
+        let out = self
+            .delegate_to
             .respond_to(req)
             .into_future()
             .map_err(|e| e.into())
             .and_then(|mut response| {
                 if let Some(msg) = message {
-                    let data = serde_json::to_string(&msg.into_inner()).expect("Serialize cannot fail");
+                    let data =
+                        serde_json::to_string(&msg.into_inner()).expect("Serialize cannot fail");
                     let mut flash_cookie = Cookie::new(FLASH_COOKIE_NAME, data);
                     flash_cookie.set_path("/");
-                    let out = response.add_cookie(&flash_cookie)
+                    let out = response
+                        .add_cookie(&flash_cookie)
                         .into_future()
                         .map_err(|e| e.into())
-                        .map(|_| response );
+                        .map(|_| response);
                     EitherFuture::A(out)
                 } else {
                     EitherFuture::B(futures::future::ok(response))
@@ -192,7 +194,6 @@ where
             });
 
         Box::new(out)
-
     }
 }
 
@@ -259,10 +260,10 @@ where
 /// the cookie is overwritten by a new message.
 /// ```no_run
 /// # use actix_web_flash::{FlashMiddleware};
-/// # use actix_web::{App, server};
-/// server::new(|| {
+/// # use actix_web::{App, HttpServer};
+/// HttpServer::new(|| {
 ///     App::new()
-///         .middleware(FlashMiddleware::default())
+///         .wrap(FlashMiddleware::default())
 /// }).bind("127.0.0.1:8080")
 ///     .unwrap()
 ///     .run();
@@ -304,7 +305,6 @@ where
     }
 
     fn call(&mut self, req: ServiceRequest) -> Self::Future {
-
         Box::new(self.0.call(req).map(move |mut res| {
             let mut jar = CookieJar::new();
             if let Some(cookie) = res.request().cookie(FLASH_COOKIE_NAME) {

@@ -1,4 +1,4 @@
-use actix_web::{http, server, App, Form, HttpResponse, Responder};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web_flash::{FlashMessage, FlashMiddleware, FlashResponse};
 use serde_derive::Deserialize;
 
@@ -24,14 +24,13 @@ fn get_login(flash: Option<FlashMessage<String>>) -> impl Responder {
     "#,
         error
     );
-    let mut resp = HttpResponse::Ok()
+    let resp = HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
-        .finish();
-    resp.set_body(form);
+        .body(form);
     resp
 }
 
-fn post_login(form: Form<Password>) -> impl Responder {
+fn post_login(form: web::Form<Password>) -> impl Responder {
     if form.into_inner().password == "hunter2" {
         FlashResponse::new(None, "Correct Password!".into())
     } else {
@@ -40,12 +39,14 @@ fn post_login(form: Form<Password>) -> impl Responder {
 }
 
 fn main() {
-    server::new(|| {
+    HttpServer::new(|| {
         App::new()
-            .middleware(FlashMiddleware::default())
-            .route("/login", http::Method::GET, get_login)
-            .route("/login", http::Method::POST, post_login)
-    }).bind("127.0.0.1:8080")
-        .unwrap()
-        .run();
+            .wrap(FlashMiddleware::default())
+            .route("/login", web::get().to(get_login))
+            .route("/login", web::post().to(post_login))
+    })
+    .bind("127.0.0.1:8080")
+    .unwrap()
+    .run()
+    .unwrap();
 }
