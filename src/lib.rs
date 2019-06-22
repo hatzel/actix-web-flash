@@ -274,6 +274,7 @@ impl<S, B> Transform<S> for FlashMiddleware
 where
     S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
+    B: 'static,
 {
     type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
@@ -294,6 +295,7 @@ impl<S, B> Service for FlashMiddlewareServiceWrapper<S>
 where
     S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,
     S::Future: 'static,
+    B: 'static,
 {
     type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
@@ -305,17 +307,17 @@ where
     }
 
     fn call(&mut self, req: ServiceRequest) -> Self::Future {
-        Box::new(self.0.call(req).map(move |mut res| {
+        Box::new(self.0.call(req).and_then(move |mut res| {
             let mut jar = CookieJar::new();
             if let Some(cookie) = res.request().cookie(FLASH_COOKIE_NAME) {
                 jar.add_original(cookie);
                 jar.remove(Cookie::named(FLASH_COOKIE_NAME));
             }
             for cookie in jar.delta() {
-                let _ = res.response_mut().add_cookie(cookie);
+                res.response_mut().add_cookie(cookie)?;
             }
 
-            res
+            Ok(res)
         }))
     }
 }
