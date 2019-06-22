@@ -29,8 +29,7 @@ fn main() {
             .wrap(FlashMiddleware::default())
             .route("/show_flash", web::get().to(show_flash))
             .route("/set_flash", web::get().to(set_flash))
-    })
-    .bind("127.0.0.1:8080")
+    }).bind("127.0.0.1:8080")
     .unwrap()
     .run()
     .unwrap();
