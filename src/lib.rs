@@ -166,7 +166,7 @@ where
     M: Serialize + DeserializeOwned + 'static,
 {
     type Error = actix_http::Error;
-    type Future = Box<Future<Item = HttpResponse, Error = Self::Error>>;
+    type Future = Box<dyn Future<Item = HttpResponse, Error = Self::Error>>;
 
     fn respond_to(mut self, req: &HttpRequest) -> Self::Future {
         let message = self.message.take();
@@ -300,7 +300,7 @@ where
     type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
     type Error = Error;
-    type Future = Box<Future<Item = Self::Response, Error = Self::Error>>;
+    type Future = Box<dyn Future<Item = Self::Response, Error = Self::Error>>;
 
     fn poll_ready(&mut self) -> Poll<(), Self::Error> {
         self.0.poll_ready()
