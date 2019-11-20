@@ -18,9 +18,8 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 futures = "0.1"
-cookie = "0.12"
 
 [dev-dependencies]
 time = "0.1"
-actix-files = "0.1.2"
-actix-http-test = "0.2.2"
+actix-files = "0.1"
+actix-http-test = "0.2"
