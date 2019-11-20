@@ -8,7 +8,7 @@ Actix web flash is an unofficial crate to provide flash messages in servers usin
 
 Flash messages are typically used to display errors on websites that are rendered server side.
 
-* [Docs](https://docs.rs/actix-web-flash/0.2.0/actix_web_flash/)
+* [Docs](https://docs.rs/actix-web-flash/latest/actix_web_flash/)
 * [Examples](examples/)
 
 ```rust
